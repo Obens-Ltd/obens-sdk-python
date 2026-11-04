@@ -6,7 +6,7 @@ Push your farmers, facilities and partners to the Obens platform under **your ow
 Python 3.9+, one dependency (`requests`).
 
 ```
-pip install obens-sdk
+pip install "obens-sdk @ git+https://github.com/Obens-Ltd/obens-sdk-python@v0.1.1"
 ```
 
 ## 1. Get an API key
