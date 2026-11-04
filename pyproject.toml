@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "obens-sdk"
-version = "0.1.0"
+version = "0.1.1"
 description = "SDK for the Obens integration API: push farmers, facilities and partners under your own ids"
 readme = "README.md"
 license = { text = "MIT" }
