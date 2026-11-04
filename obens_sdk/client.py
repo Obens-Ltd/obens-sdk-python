@@ -31,8 +31,10 @@ class Resource:
             results.extend(self._http.request("POST", f"{self._path}/bulk", {"items": items[i : i + size]}))
         return results
 
-    def get(self, external_id: str) -> Dict[str, Any]:
-        return self._http.request("GET", f"{self._path}/{_enc(external_id)}")
+    def get(self, external_id: str, sub_actor: Optional[str] = None) -> Dict[str, Any]:
+        """``sub_actor``: the external id of the farmer a facility belongs to (facility ids are unique per owner)."""
+        query = f"?sub-actor={_enc(sub_actor)}" if sub_actor else ""
+        return self._http.request("GET", f"{self._path}/{_enc(external_id)}{query}")
 
 
 class _Accounts:

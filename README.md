@@ -85,6 +85,17 @@ facilities = client.syncer("facilities", map=create_mapper({
 }))
 ```
 
+### Facilities of a farmer
+
+A farmer can own many facilities (orchards, plots...). Give the farmer's external id in `subActorExternalId` and the
+facility belongs to that farmer. The farmer must have been pushed first. A facility's id is unique **per owner**, so
+read it back with the same farmer:
+
+```python
+create_mapper({"externalId": "id", "subActorExternalId": "farmer_id", "info.name": "title"})
+client.facilities.get("orchard-12", sub_actor="farmer-42")
+```
+
 ## 6. Match your ids to platform ids
 
 ```python
