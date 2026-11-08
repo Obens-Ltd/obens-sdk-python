@@ -9,6 +9,124 @@ Python 3.9+, one dependency (`requests`).
 pip install "obens-sdk @ git+https://github.com/Obens-Ltd/obens-sdk-python@v0.1.2"
 ```
 
+## How it fits together
+
+Six small pictures of what happens behind the SDK (Mermaid diagrams, GitHub draws them).
+
+### The big picture
+
+Your system keeps its own ids. The SDK sends records with those ids to the platform; the platform stores its own id
+next to yours and can translate either way.
+
+```mermaid
+flowchart LR
+  subgraph yours["Your system"]
+    DB[("Your database<br/>farmers, orchards, partners")]
+    APP["Your code<br/>+ Obens SDK"]
+    DB --> APP
+  end
+  APP -- "HTTPS + X-API-KEY<br/>PUT / bulk by your id" --> API["Integration API<br/>/v2/core/integration"]
+  subgraph obens["Obens platform"]
+    API --> ST[("Platform records<br/>farmers, facilities")]
+    API <--> MAP[("Id table<br/>your id &harr; platform id")]
+  end
+```
+
+### What an API key is allowed to touch
+
+A key is bound to **one account in one workspace**. It can only see that account's records (plus accounts that
+delegated to it, see below). Farmers live in an **element** (a list with its own custom form); facilities (orchards,
+plots...) belong to a farmer.
+
+```mermaid
+flowchart TD
+  W["Workspace"] --> A["Account<br/>(your company)"]
+  K["API key obk_...<br/>acts as this account in this workspace"] -.-> A
+  A --> E["Element<br/>a list + its custom form<br/>e.g. 'Farmers'"]
+  E --> F1["Farmer<br/>externalId: farmer-42"]
+  E --> F2["Farmer<br/>externalId: farmer-43"]
+  F1 --> O1["Facility<br/>externalId: orchard-12"]
+  F1 --> O2["Facility<br/>externalId: orchard-13"]
+  F2 --> O3["Facility<br/>externalId: orchard-12"]
+  A --> AF["Facility of the account itself"]
+```
+
+Notice `orchard-12` twice: a facility id is unique **per owner**, so the same id under two farmers is two different
+facilities. Farmers have their own id space, facilities have theirs.
+
+### One push, step by step
+
+The first push of an id creates the record, every later push updates it. That is why retries and full replays never
+create duplicates.
+
+```mermaid
+sequenceDiagram
+  participant You as Your code (SDK)
+  participant API as Integration API
+  participant DB as Platform records
+  participant Map as Id table
+
+  You->>API: PUT sub-actors/farmer-42 (name, elementId, data)
+  API->>API: check key (revoked? expired?)
+  API->>Map: is "farmer-42" known for this account?
+  alt first time
+    API->>DB: create farmer
+    API->>Map: store farmer-42 -> platform id
+    API-->>You: CREATED + platform id
+  else already known
+    API->>DB: update the same farmer
+    API-->>You: UPDATED + platform id
+  end
+  Note over You,API: A facility push names its farmer with<br/>subActorExternalId, so the farmer must be pushed first.
+```
+
+### Load once, then push changes
+
+```mermaid
+flowchart LR
+  A["Initial load<br/>init(all rows)<br/>in chunks of 200-500"] --> B{"Any failures<br/>in the report?"}
+  B -- yes --> C["Fix the rows<br/>run init again<br/>(done rows are updated, not duplicated)"]
+  C --> B
+  B -- no --> D["Live: push / pushMany / remove<br/>from your save hook or queue"]
+  D --> D
+  E["Nightly or after an outage:<br/>replay the whole table"] -.-> A
+```
+
+### Acting for other accounts (delegation)
+
+If other accounts have delegated to the key's account (a cooperative and its members, for example), the same key can
+act on them. Each account has its **own** id space, so `farmer-42` of the cooperative and `farmer-42` of a member are
+different farmers.
+
+```mermaid
+flowchart TD
+  K["Your API key"] --> C["Your account<br/>(cooperative)"]
+  C -- "delegated" --> M1["Member account 1"]
+  C -- "delegated" --> M2["Member account 2"]
+  C --- I0[("Own ids:<br/>farmer-42 &rarr; farmer A")]
+  M1 --- I1[("Ids of member 1:<br/>farmer-42 &rarr; farmer B")]
+  M2 --- I2[("Ids of member 2:<br/>farmer-42 &rarr; farmer C")]
+```
+
+A revoked delegation answers `403` on the next call.
+
+### Matching accounts that already exist
+
+Accounts are shared between clients, so an account cannot carry your id. You **link** your id to it; the link is
+private to your account.
+
+```mermaid
+flowchart LR
+  subgraph yours["Your ids"]
+    S["supplier-9"]
+  end
+  subgraph obens["Platform"]
+    AC["Existing account<br/>66f0aa..."]
+  end
+  S -- "link (private to your account)" --> AC
+  S2["another client's id<br/>'sup-001'"] -. "their own, separate link" .-> AC
+```
+
 ## 1. Get an API key
 
 In the platform: **Settings → API keys → Create key**. Pick the account and workspace it acts as. The secret
