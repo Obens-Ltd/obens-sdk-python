@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import time
-from typing import Any, Optional
+from typing import Any, Callable, Dict, Optional
 from urllib.parse import quote
 
 import requests
@@ -28,6 +28,7 @@ class Http:
         retry_delay: float = 0.5,
         session: Optional[requests.Session] = None,
         account_id: Optional[str] = None,
+        extra_headers: Optional[Callable[[], Dict[str, str]]] = None,
     ):
         if not base_url:
             raise ValueError("base_url is required")
@@ -35,6 +36,8 @@ class Http:
             raise ValueError("api_key is required")
         self.base_url = base_url.rstrip("/")
         self.account_id = account_id
+        # headers that need a lookup first (the workspace id), called once per request
+        self.extra_headers = extra_headers
         self.timeout = timeout
         self.max_retries = max_retries
         self.retry_delay = retry_delay
@@ -45,11 +48,12 @@ class Http:
         # a delegated account to act on, instead of the key's own
         if self.account_id:
             path += ("&" if "?" in path else "?") + "account-id=" + quote(self.account_id, safe="")
+        headers = self.extra_headers() if self.extra_headers else None
         attempt = 0
         while True:
             try:
                 response = self.session.request(
-                    method, self.base_url + path, json=body, timeout=self.timeout
+                    method, self.base_url + path, json=body, timeout=self.timeout, headers=headers
                 )
             except requests.RequestException:
                 # network error or timeout: safe to repeat because every call is an upsert
